@@ -4,6 +4,7 @@ from typing import Dict, List, Any, Union, Literal
 import aiohttp
 import numpy as np
 from sentence_transformers import SentenceTransformer
+from loguru import logger
 
 EmbeddingClient = Literal['cohere', 'openai', 'voyage']
 
@@ -27,6 +28,7 @@ class Shapeshift:
         self.local_model = SentenceTransformer('all-MiniLM-L6-v2')
 
     async def calculate_embeddings(self, texts: List[str]) -> List[List[float]]:
+        logger.info(f"Calculating embeddings for {len(texts)} texts using {self.embedding_client} client")
         if self.embedding_client == 'cohere':
             return await self._cohere_embeddings(texts)
         elif self.embedding_client == 'openai':
@@ -45,6 +47,7 @@ class Shapeshift:
                 headers={'Authorization': f'Bearer {self.api_key}'}
             ) as response:
                 data = await response.json()
+                logger.info(f"Received embeddings from Cohere: {data}")
                 return data['embeddings']
 
     async def _openai_embeddings(self, texts: List[str]) -> List[List[float]]:
@@ -57,6 +60,7 @@ class Shapeshift:
                     headers={'Authorization': f'Bearer {self.api_key}'}
                 ) as response:
                     data = await response.json()
+                    logger.info(f"Received embeddings from OpenAI for text: {text}")
                     embeddings.append(data['data'][0]['embedding'])
             return embeddings
 
@@ -68,6 +72,7 @@ class Shapeshift:
                 headers={'Authorization': f'Bearer {self.api_key}'}
             ) as response:
                 data = await response.json()
+                logger.info(f"Received embeddings from Voyage: {data}")
                 return [item['embedding'] for item in data['data']]
 
     @staticmethod
@@ -106,13 +111,16 @@ class Shapeshift:
         return result
 
     async def shapeshift(self, source_obj: Dict[str, Any], target_obj: Dict[str, Any]) -> Dict[str, Any]:
+        logger.info("Flattening source and target objects")
         flattened_source_obj = self.flatten_object(source_obj)
         flattened_target_obj = self.flatten_object(target_obj)
 
         source_keys = list(flattened_source_obj.keys())
         target_keys = list(flattened_target_obj.keys())
 
+        logger.info(f"Calculating embeddings for source keys: {source_keys}")
         source_embeddings = await self.calculate_embeddings(source_keys)
+        logger.info(f"Calculating embeddings for target keys: {target_keys}")
         target_embeddings = await self.calculate_embeddings(target_keys)
 
         flattened_result = {}
@@ -124,6 +132,7 @@ class Shapeshift:
             if closest_target_index is not None:
                 closest_target_key = target_keys[closest_target_index]
                 flattened_result[closest_target_key] = flattened_source_obj[source_key]
+                logger.info(f"Mapping source key {source_key} to target key {closest_target_key}")
 
         return self.unflatten_object(flattened_result)
 
@@ -154,22 +163,22 @@ async def main():
 
     try:
         # Cohere example
-        shapeshifter = Shapeshift('cohere', os.getenv('COHERE_API_KEY', ''))
-        shifted_obj = await shapeshifter.shapeshift(source_obj, target_obj)
-        print("Shifted object:", shifted_obj)
+        # shapeshifter = Shapeshift('cohere', os.getenv('COHERE_API_KEY', ''))
+        # shifted_obj = await shapeshifter.shapeshift(source_obj, target_obj)
+        # logger.info(f"Cohere Shifted object: {shifted_obj}")
 
         # OpenAI example
         openai_shapeshifter = Shapeshift('openai', os.getenv('OPENAI_API_KEY', ''))
         openai_shifted_obj = await openai_shapeshifter.shapeshift(source_obj, target_obj)
-        print("OpenAI Shifted object:", openai_shifted_obj)
+        logger.info(f"OpenAI Shifted object: {openai_shifted_obj}")
 
         # Voyage example
-        voyage_shapeshifter = Shapeshift('voyage', os.getenv('VOYAGE_API_KEY', ''))
-        voyage_shifted_obj = await voyage_shapeshifter.shapeshift(source_obj, target_obj)
-        print("Voyage Shifted object:", voyage_shifted_obj)
+        # voyage_shapeshifter = Shapeshift('voyage', os.getenv('VOYAGE_API_KEY', ''))
+        # voyage_shifted_obj = await voyage_shapeshifter.shapeshift(source_obj, target_obj)
+        # logger.info(f"Voyage Shifted object: {voyage_shifted_obj}")
 
     except Exception as error:
-        print("Error:", str(error))
+        logger.error(f"Error: {str(error)}")
 
 if __name__ == "__main__":
     asyncio.run(main())
